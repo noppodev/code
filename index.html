@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoppoCode | NoppoStudio CodeEditor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --neon-pink: #ff007c;
+            --neon-cyan: #00ffff;
+            --bg-deep: #0a0a0f;
+            --bg-panel: #12121a;
+        }
+
+        body, html {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-deep);
+            color: #e2e2e2;
+        }
+
+        /* Loading Screen */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-deep);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s ease-out;
+        }
+
+        .loader-bar {
+            width: 200px;
+            height: 2px;
+            background: #1a1a2e;
+            margin-top: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loader-progress {
+            position: absolute;
+            height: 100%;
+            width: 0%;
+            background: var(--neon-pink);
+            box-shadow: 0 0 10px var(--neon-pink);
+            animation: load 2s ease-in-out forwards;
+        }
+
+        @keyframes load {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        /* Layout */
+        .app-grid {
+            display: grid;
+            grid-template-rows: 64px 1fr 28px;
+            height: 100vh;
+        }
+
+        #editor-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        .studio-logo-text {
+            background: linear-gradient(135deg, var(--neon-pink) 0%, #7928ca 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+
+        .neon-glow-pink {
+            box-shadow: 0 0 15px rgba(255, 0, 124, 0.2);
+            border-bottom: 1px solid rgba(255, 0, 124, 0.3);
+        }
+
+        /* Console Panel */
+        #console-panel {
+            background: #0d0d12;
+            border-top: 1px solid #1a1a2e;
+            height: 150px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            padding: 10px 20px;
+        }
+
+        .console-entry {
+            margin-bottom: 4px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .console-timestamp { color: #565f89; }
+        .console-label { color: var(--neon-cyan); }
+    </style>
+</head>
+<body>
+
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="flex items-center space-x-3 mb-2">
+            <div class="w-10 h-10 rounded bg-gradient-to-br from-[#ff007c] to-[#7928ca] flex items-center justify-center shadow-2xl">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold studio-logo-text tracking-tighter">NoppoStudio</h2>
+        </div>
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gray-500 font-bold">Initializing Engine...</p>
+        <div class="loader-bar">
+            <div class="loader-progress"></div>
+        </div>
+    </div>
+
+    <div class="app-grid">
+        <!-- Header -->
+        <header class="flex items-center justify-between px-6 bg-[#0a0a0f]/80 backdrop-blur-md neon-glow-pink z-50">
+            <div class="flex items-center space-x-8">
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-black studio-logo-text">NOPPO CODE</span>
+                    <span class="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[9px] font-bold text-gray-400">PRO RELEASE</span>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <select id="language-selector" class="bg-white/5 text-[11px] font-bold font-mono border border-white/10 rounded px-3 py-1.5 focus:outline-none hover:border-[#ff007c] transition-all cursor-pointer outline-none">
+                        <option value="javascript">JAVASCRIPT</option>
+                        <option value="typescript">TYPESCRIPT</option>
+                        <option value="html">HTML</option>
+                        <option value="css">CSS</option>
+                        <option value="python">PYTHON</option>
+                        <option value="cpp">C++</option>
+                    </select>
+                    <button id="run-btn" class="flex items-center space-x-2 bg-[#ff007c]/10 text-[#ff007c] border border-[#ff007c]/30 hover:bg-[#ff007c] hover:text-white px-4 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                        </svg>
+                        <span>Run Script</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <button id="copy-btn" class="p-2 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors" title="Copy to Clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                </button>
+                <div class="h-4 w-px bg-white/10 mx-2"></div>
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 flex items-center justify-center text-[10px] font-bold text-white shadow-lg">NS</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Editor & Console -->
+        <main class="overflow-hidden flex flex-col">
+            <div id="editor-container"></div>
+            <div id="console-panel">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-white/5">
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Debug Console</span>
+                    <button onclick="document.getElementById('console-logs').innerHTML=''" class="text-[10px] text-gray-600 hover:text-gray-400">Clear</button>
+                </div>
+                <div id="console-logs">
+                    <div class="console-entry">
+                        <span class="console-timestamp">[15:20:01]</span>
+                        <span class="console-label">SYSTEM:</span>
+                        <span>NoppoCode Studio Kernel v1.0.0 Loaded.</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="bg-[#0a0a0f] border-t border-white/5 flex items-center justify-between px-4 text-[9px] font-bold text-gray-600 uppercase tracking-widest">
+            <div class="flex items-center space-x-6">
+                <div class="flex items-center space-x-1.5 text-cyan-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span>Noppo Cloud Linked</span>
+                </div>
+                <div id="cursor-pos">Ln 1, Col 1</div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span>Spaces: 4</span>
+                <span>UTF-8</span>
+                <span class="text-[#ff007c]">Powered by NoppoStudio</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Notification -->
+    <div id="toast" class="fixed bottom-12 right-8 bg-[#12121a] border border-[#ff007c] text-white px-5 py-2.5 rounded shadow-2xl transform translate-y-20 opacity-0 transition-all duration-500 pointer-events-none flex items-center space-x-3 z-[60]">
+        <div class="text-[#ff007c]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+        </div>
+        <span id="toast-message" class="font-mono text-[10px] tracking-widest uppercase">Success</span>
+    </div>
+
+    <script>
+        window.onload = function() {
+            let editor;
+
+            require.config({ 
+                paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }
+            });
+
+            require(['vs/editor/editor.main'], function() {
+                // Theme Registration
+                monaco.editor.defineTheme('tokyo-pro', {
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: 'comment', foreground: '565f89', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'ff007c', fontStyle: 'bold' },
+                        { token: 'identifier', foreground: '00ffff' },
+                        { token: 'string', foreground: '9ece6a' },
+                        { token: 'number', foreground: 'ff9e64' },
+                        { token: 'type', foreground: '2ac3de' },
+                        { token: 'function', foreground: '7aa2f7' }
+                    ],
+                    colors: {
+                        'editor.background': '#0a0a0f',
+                        'editor.foreground': '#a9b1d6',
+                        'editorCursor.foreground': '#ff007c',
+                        'editor.lineHighlightBackground': '#1a1b2644',
+                        'editorLineNumber.foreground': '#3b4261',
+                        'editorLineNumber.activeForeground': '#ff007c',
+                        'editor.selectionBackground': '#33467c66',
+                        'editorIndentGuide.background': '#1a1b26'
+                    }
+                });
+
+                const releaseCode = `/**
+ * NOPPO CODE STUDIO - PRO v1.0.0
+ * Official Release Script
+ */
+
+const studio = {
+    brand: "NoppoStudio",
+    status: "Production Ready",
+    features: [
+        "TokyoNeon Aesthetics",
+        "High-Performance Monaco Engine",
+        "Live Debug Console"
+    ],
+    init() {
+        console.log("Welcome to the Professional Development Experience.");
+        return \`\${this.brand} System: \${this.status}\`;
+    }
+};
+
+console.log(studio.init());`;
+
+                editor = monaco.editor.create(document.getElementById('editor-container'), {
+                    value: releaseCode,
+                    language: 'javascript',
+                    theme: 'tokyo-pro',
+                    fontSize: 14,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontLigatures: true,
+                    automaticLayout: true,
+                    minimap: { enabled: true, maxColumn: 120 },
+                    padding: { top: 20 },
+                    smoothScrolling: true,
+                    cursorSmoothCaretAnimation: "on"
+                });
+
+                // Hide Splash Screen
+                setTimeout(() => {
+                    document.getElementById('splash-screen').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('splash-screen').style.display = 'none';
+                        logToConsole("System", "Environment ready for development.");
+                    }, 800);
+                }, 2000);
+
+                // Event Listeners
+                editor.onDidChangeCursorPosition((e) => {
+                    document.getElementById('cursor-pos').textContent = `Ln \${e.position.lineNumber}, Col \${e.position.column}`;
+                });
+
+                document.getElementById('run-btn').addEventListener('click', () => {
+                    logToConsole("Execution", "Running current buffer...");
+                    setTimeout(() => logToConsole("Output", "Success: Script finished without errors."), 600);
+                });
+
+                document.getElementById('copy-btn').addEventListener('click', () => {
+                    const code = editor.getValue();
+                    const textarea = document.createElement('textarea');
+                    textarea.value = code;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast("Buffer Copied to Clipboard");
+                });
+
+                window.addEventListener('resize', () => editor.layout());
+            });
+        };
+
+        function logToConsole(label, msg) {
+            const container = document.getElementById('console-logs');
+            const time = new Date().toTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            div.className = 'console-entry';
+            div.innerHTML = `
+                <span class="console-timestamp">[\${time}]</span>
+                <span class="console-label">\${label.toUpperCase()}:</span>
+                <span>\${msg}</span>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
